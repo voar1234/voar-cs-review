@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>보아르 리뷰이벤트 발송 현황 (CS)</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#ffffff; --border:#e5e7eb;
+    --text:#111827; --text-soft:#6b7280;
+    --accent:#7c3aed;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Pretendard','Segoe UI','Apple SD Gothic Neo','Noto Sans KR',sans-serif;font-size:14px}
+  header{background:#fff;border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  header h1{margin:0;font-size:18px;font-weight:700}
+  header .subtitle{font-size:12px;color:var(--text-soft);margin-top:2px}
+  .sync-info{font-size:12px;color:var(--text-soft);display:flex;align-items:center;gap:8px}
+  .sync-dot{width:8px;height:8px;border-radius:50%;background:#10b981;animation:pulse 2s infinite}
+  .sync-dot.stale{background:#f59e0b}
+  .sync-dot.error{background:#ef4444;animation:none}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+  main{max-width:1400px;margin:0 auto;padding:20px 24px}
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
+  @media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px}
+  .kpi-label{font-size:12px;color:var(--text-soft);margin-bottom:6px}
+  .kpi-value{font-size:24px;font-weight:700}
+  .kpi-overdue .kpi-value{color:#dc2626}
+  .kpi-soon .kpi-value{color:#b45309}
+  .kpi-done .kpi-value{color:#059669}
+  .kpi-amount .kpi-value{color:#7c3aed}
+
+  .toolbar{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
+  .toolbar input{padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:200px}
+  .toolbar select{padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff}
+  .toolbar .spacer{flex:1}
+  .toolbar .meta{font-size:11px;color:var(--text-soft)}
+
+  table{width:100%;background:#fff;border:1px solid var(--border);border-radius:8px;border-collapse:separate;border-spacing:0;overflow:hidden}
+  th{background:#f3f4f6;text-align:left;padding:10px 12px;font-size:12px;font-weight:700;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
+  td{padding:10px 12px;border-bottom:1px solid #f1f3f5;vertical-align:top;font-size:13px}
+  tr:last-child td{border-bottom:none}
+  .num{text-align:center}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .chip{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
+  .chip-sent{background:#d1fae5;color:#065f46}
+  .chip-unsent{background:#fee2e2;color:#991b1b}
+  .chip-blocked{background:#fef3c7;color:#92400e}
+  .row-blocked{background:#fef9c3}
+  .empty{padding:40px;text-align:center;color:var(--text-soft);background:#fff;border:1px dashed var(--border);border-radius:8px}
+  .reason{color:#92400e;font-weight:600}
+  .memo-sub{margin-top:2px;font-size:11px;color:var(--text-soft)}
+  footer{text-align:center;padding:20px;font-size:11px;color:var(--text-soft)}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📋 보아르 리뷰이벤트 발송 현황</h1>
+    <div class="subtitle">맘카페·인스타 후기 작성 고객 신세계상품권 발송 관리 (CS팀 공유용 · 읽기 전용)</div>
+  </div>
+  <div class="sync-info">
+    <span class="sync-dot" id="syncDot"></span>
+    <span id="syncStatus">데이터 불러오는 중…</span>
+  </div>
+</header>
+
+<main>
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-label">전체 건수</div><div class="kpi-value" id="kpi-total">-</div></div>
+    <div class="kpi kpi-soon"><div class="kpi-label">7일내 발송 임박</div><div class="kpi-value" id="kpi-soon">-</div></div>
+    <div class="kpi kpi-overdue"><div class="kpi-label">발송 지연</div><div class="kpi-value" id="kpi-overdue">-</div></div>
+    <div class="kpi kpi-done"><div class="kpi-label">발송 완료</div><div class="kpi-value" id="kpi-done">-</div></div>
+    <div class="kpi kpi-amount"><div class="kpi-label">발송 누적액 (₩ 1만원/채널)</div><div class="kpi-value" id="kpi-amount">-</div></div>
+  </div>
+
+  <div class="toolbar">
+    <input id="q" placeholder="🔍 고객명·전화·아이디 검색">
+    <select id="filter">
+      <option value="all">전체</option>
+      <option value="unsent">미발송만</option>
+      <option value="soon">7일내 임박</option>
+      <option value="overdue">지연</option>
+      <option value="sent">발송 완료</option>
+      <option value="blocked">발송불가</option>
+    </select>
+    <select id="sort">
+      <option value="senddate">발송예정일 빠른순</option>
+      <option value="senddate_desc">발송예정일 늦은순</option>
+      <option value="date_desc">작성일 최신순</option>
+      <option value="date_asc">작성일 오래된순</option>
+    </select>
+    <div class="spacer"></div>
+    <div class="meta">자동 새로고침 60초</div>
+  </div>
+
+  <div id="tableHost"></div>
+  <div id="emptyState" class="empty" hidden>등록된 고객이 없습니다.</div>
+</main>
+
+<footer>오아 주식회사 · 보아르 영업MD 김민채 · CS 협업용 뷰</footer>
+
+<script>
+'use strict';
+
+// ════════════════════════════════════════════════════════════════════
+// ⚙️  설정 (Supabase 가입 후 아래 두 줄만 채워 넣으면 됨)
+// ════════════════════════════════════════════════════════════════════
+const SUPABASE_URL = 'https://vgzodlljefanuipohevy.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_Xj1aWpDLyfaAPxkn1q-ErA_94MEBT9V';
+// ════════════════════════════════════════════════════════════════════
+
+const RV_HOLIDAYS = new Set([
+  '2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02',
+  '2026-05-05','2026-05-24','2026-05-25','2026-06-03','2026-06-06',
+  '2026-08-15','2026-08-17','2026-09-24','2026-09-25','2026-09-26',
+  '2026-10-03','2026-10-05','2026-10-09','2026-12-25',
+  '2027-01-01','2027-02-06','2027-02-07','2027-02-08','2027-03-01',
+  '2027-05-05','2027-05-13','2027-06-06','2027-08-15','2027-09-14',
+  '2027-09-15','2027-09-16','2027-10-03','2027-10-09','2027-12-25',
+]);
+
+function todayIso(d){d=d||new Date();const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),da=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${da}`;}
+function addDays(iso,days){if(!iso)return null;const d=new Date(iso);d.setDate(d.getDate()+days);return todayIso(d);}
+function isHoliday(iso){if(!iso)return false;const d=new Date(iso);const w=d.getDay();if(w===0||w===6)return true;return RV_HOLIDAYS.has(iso);}
+function computeSendDate(작성일){if(!작성일)return null;let d=addDays(작성일,30);while(isHoliday(d))d=addDays(d,1);return d;}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+let _DATA = [];
+let _LAST_SYNC = null;
+
+async function fetchReviews(){
+  const dot = document.getElementById('syncDot');
+  const txt = document.getElementById('syncStatus');
+  if (SUPABASE_URL.startsWith('__') || SUPABASE_KEY.startsWith('__')) {
+    dot.className = 'sync-dot error';
+    txt.textContent = '⚠️ Supabase 설정 필요';
+    return;
+  }
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/reviews?select=*&order=작성일.asc`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    _DATA = await res.json();
+    _LAST_SYNC = new Date();
+    dot.className = 'sync-dot';
+    txt.textContent = `최근 동기화: ${_LAST_SYNC.toLocaleTimeString('ko-KR')}`;
+    render();
+  } catch(e){
+    console.error(e);
+    dot.className = 'sync-dot error';
+    txt.textContent = '⚠️ 데이터 로드 실패 · ' + e.message;
+  }
+}
+
+function rowStatus(r){
+  const blocked = !!r.발송불가;
+  if (blocked) return 'blocked';
+  const needMom   = !!(r.후기링크_맘카페 && (''+r.후기링크_맘카페).trim());
+  const needInsta = !!(r.후기링크_인스타 && (''+r.후기링크_인스타).trim());
+  const anyNeeded = needMom || needInsta;
+  const momOk   = !needMom   || r.발송완료_맘카페;
+  const instaOk = !needInsta || r.발송완료_인스타;
+  const sent = anyNeeded && momOk && instaOk;
+  if (sent) return 'sent';
+  return 'unsent';
+}
+
+function render(){
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const filter = document.getElementById('filter').value;
+  const sortMode = document.getElementById('sort').value;
+  const today = todayIso();
+  const todayMs = new Date(today).setHours(0,0,0,0);
+
+  let kpiTotal = 0, kpiSoon = 0, kpiOverdue = 0, kpiDone = 0, kpiAmount = 0;
+  const annotated = _DATA.map(r => {
+    const sendDate = computeSendDate(r.작성일);
+    const status = rowStatus(r);
+    let dDay = null;
+    if (sendDate) dDay = Math.round((new Date(sendDate).setHours(0,0,0,0) - todayMs)/86400000);
+    return { ...r, _sendDate: sendDate, _status: status, _dDay: dDay };
+  });
+
+  for (const r of annotated){
+    kpiTotal++;
+    // 발송 누적액 — 발송완료된 채널별 1만원 (발송불가는 제외)
+    if (r._status !== 'blocked') {
+      if (r.발송완료_맘카페) kpiAmount += 10000;
+      if (r.발송완료_인스타) kpiAmount += 10000;
+    }
+    if (r._status === 'blocked') continue;
+    if (r._status === 'sent') { kpiDone++; continue; }
+    if (r._dDay != null && r._dDay < 0) kpiOverdue++;
+    else if (r._dDay != null && r._dDay <= 7) kpiSoon++;
+  }
+  document.getElementById('kpi-total').textContent = kpiTotal;
+  document.getElementById('kpi-soon').textContent = kpiSoon;
+  document.getElementById('kpi-overdue').textContent = kpiOverdue;
+  document.getElementById('kpi-done').textContent = kpiDone;
+  document.getElementById('kpi-amount').textContent = kpiAmount.toLocaleString('ko-KR') + '원';
+
+  let rows = annotated;
+  if (q) rows = rows.filter(r =>
+    [r.고객명, r.전화번호, r.아이디_맘카페, r.아이디_인스타, r.메모, r.발송불가_사유]
+      .filter(Boolean).some(v => String(v).toLowerCase().includes(q))
+  );
+  if (filter === 'unsent') rows = rows.filter(r => r._status === 'unsent');
+  else if (filter === 'sent') rows = rows.filter(r => r._status === 'sent');
+  else if (filter === 'blocked') rows = rows.filter(r => r._status === 'blocked');
+  else if (filter === 'soon') rows = rows.filter(r => r._status === 'unsent' && r._dDay != null && r._dDay >= 0 && r._dDay <= 7);
+  else if (filter === 'overdue') rows = rows.filter(r => r._status === 'unsent' && r._dDay != null && r._dDay < 0);
+
+  const cmp = {
+    'senddate':      (a,b) => (a._sendDate||'').localeCompare(b._sendDate||''),
+    'senddate_desc': (a,b) => (b._sendDate||'').localeCompare(a._sendDate||''),
+    'date_desc':     (a,b) => (b.작성일||'').localeCompare(a.작성일||''),
+    'date_asc':      (a,b) => (a.작성일||'').localeCompare(b.작성일||''),
+  }[sortMode];
+  rows.sort(cmp);
+
+  const host = document.getElementById('tableHost');
+  const empty = document.getElementById('emptyState');
+  if (!rows.length){
+    host.innerHTML = '';
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+
+  let html = `<table><thead><tr>
+    <th>작성일</th><th>고객명</th><th>전화번호</th>
+    <th>맘카페 후기</th><th>인스타 후기</th>
+    <th>발송 예정일</th><th>발송 상태</th><th>메모</th>
+  </tr></thead><tbody>`;
+
+  for (const r of rows){
+    const blocked = r._status === 'blocked';
+    const sent = r._status === 'sent';
+    const dDay = r._dDay;
+
+    let sendStyle = '';
+    if (blocked) sendStyle = 'color:#92400e;text-decoration:line-through';
+    else if (!sent && dDay != null){
+      if (dDay < 0) sendStyle = 'color:#dc2626;font-weight:700';
+      else if (dDay <= 7) sendStyle = 'color:#b45309;font-weight:700';
+    }
+    let sendSub = '';
+    if (blocked) sendSub = `<div style="font-size:10px;color:#92400e">발송 제외</div>`;
+    else if (!sent && dDay != null && dDay < 0) sendSub = `<div style="font-size:10px;color:#dc2626">${-dDay}일 지연</div>`;
+    else if (!sent && dDay != null && dDay <= 7) sendSub = `<div style="font-size:10px;color:#b45309">${dDay}일 남음</div>`;
+
+    let statusChip;
+    if (blocked) statusChip = `<span class="chip chip-blocked" title="${esc(r.발송불가_사유||'')}">발송불가</span>`;
+    else if (sent) statusChip = `<span class="chip chip-sent">발송</span>`;
+    else statusChip = `<span class="chip chip-unsent">미발송</span>`;
+
+    const momCell = r.후기링크_맘카페
+      ? `<a href="${esc(r.후기링크_맘카페)}" target="_blank">🔗 보기</a>${r.아이디_맘카페 ? `<div class="memo-sub">@${esc(r.아이디_맘카페)}</div>` : ''}`
+      : (r.아이디_맘카페 ? `<div class="memo-sub">@${esc(r.아이디_맘카페)}</div>` : '-');
+    const instaCell = r.후기링크_인스타
+      ? `<a href="${esc(r.후기링크_인스타)}" target="_blank">🔗 보기</a>${r.아이디_인스타 ? `<div class="memo-sub">@${esc(r.아이디_인스타)}</div>` : ''}`
+      : (r.아이디_인스타 ? `<div class="memo-sub">@${esc(r.아이디_인스타)}</div>` : '-');
+
+    const memoCell = `${blocked && r.발송불가_사유 ? `<div class="reason">⚠️ ${esc(r.발송불가_사유)}</div>` : ''}${r.메모 ? `<div class="${blocked && r.발송불가_사유 ? 'memo-sub' : ''}">${esc(r.메모)}</div>` : ''}`;
+
+    html += `<tr class="${blocked ? 'row-blocked' : ''}">
+      <td>${esc(r.작성일)||'-'}</td>
+      <td>${esc(r.고객명)||'-'}</td>
+      <td>${esc(r.전화번호)||'-'}</td>
+      <td>${momCell}</td>
+      <td>${instaCell}</td>
+      <td><div style="${sendStyle}">${esc(r._sendDate)||'-'}</div>${sendSub}</td>
+      <td>${statusChip}</td>
+      <td>${memoCell || '-'}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  host.innerHTML = html;
+}
+
+document.getElementById('q').addEventListener('input', render);
+document.getElementById('filter').addEventListener('change', render);
+document.getElementById('sort').addEventListener('change', render);
+
+fetchReviews();
+setInterval(fetchReviews, 60000);  // 60초마다 자동 새로고침
+</script>
+</body>
+</html>
