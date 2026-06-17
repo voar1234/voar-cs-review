@@ -49,6 +49,10 @@
   .chip-sent{background:#d1fae5;color:#065f46}
   .chip-unsent{background:#fee2e2;color:#991b1b}
   .chip-blocked{background:#fef3c7;color:#92400e}
+  .chip-partial{background:#dbeafe;color:#1e40af}
+  .dot-ok{color:#10b981;font-size:14px;font-weight:700;line-height:1}
+  .dot-x{color:#dc2626;font-size:14px;font-weight:400;line-height:1}
+  .ch-row{display:flex;align-items:center;gap:6px}
   .row-blocked{background:#fef9c3}
   .empty{padding:40px;text-align:center;color:var(--text-soft);background:#fff;border:1px dashed var(--border);border-radius:8px}
   .reason{color:#92400e;font-weight:600}
@@ -94,6 +98,7 @@
       <option value="date_desc">작성일 최신순</option>
       <option value="date_asc">작성일 오래된순</option>
     </select>
+    <span style="font-size:12px;color:#7c3aed;font-weight:600">※ 매주 수요일 일괄 발송</span>
     <div class="spacer"></div>
     <div class="meta">자동 새로고침 60초</div>
   </div>
@@ -124,10 +129,17 @@ const RV_HOLIDAYS = new Set([
   '2027-09-15','2027-09-16','2027-10-03','2027-10-09','2027-12-25',
 ]);
 
+const DOW_KR=['일','월','화','수','목','금','토'];
 function todayIso(d){d=d||new Date();const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),da=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${da}`;}
 function addDays(iso,days){if(!iso)return null;const d=new Date(iso);d.setDate(d.getDate()+days);return todayIso(d);}
 function isHoliday(iso){if(!iso)return false;const d=new Date(iso);const w=d.getDay();if(w===0||w===6)return true;return RV_HOLIDAYS.has(iso);}
-function computeSendDate(작성일){if(!작성일)return null;let d=addDays(작성일,30);while(isHoliday(d))d=addDays(d,1);return d;}
+// 발송 가능일 = 작성일 + 30일
+function computeAvailableDate(작성일){if(!작성일)return null;return addDays(작성일,30);}
+// 발송 예정일 = 발송 가능일 이상의 첫 수요일
+function computeShipDate(가능일){if(!가능일)return null;const d=new Date(가능일);const dow=d.getDay();const diff=(3-dow+7)%7;d.setDate(d.getDate()+diff);return todayIso(d);}
+// 호환: 기존 호출자
+function computeSendDate(작성일){return computeShipDate(computeAvailableDate(작성일));}
+function fmtDow(iso){if(!iso)return '-';return `${iso} (${DOW_KR[new Date(iso).getDay()]})`;}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
 let _DATA = [];
@@ -159,16 +171,26 @@ async function fetchReviews(){
 }
 
 function rowStatus(r){
-  const blocked = !!r.발송불가;
-  if (blocked) return 'blocked';
-  const needMom   = !!(r.후기링크_맘카페 && (''+r.후기링크_맘카페).trim());
-  const needInsta = !!(r.후기링크_인스타 && (''+r.후기링크_인스타).trim());
+  const oldBlocked = !!r.발송불가;
+  const blockedMom   = (r.발송불가_맘카페 !== undefined) ? !!r.발송불가_맘카페   : oldBlocked;
+  const blockedInsta = (r.발송불가_인스타 !== undefined) ? !!r.발송불가_인스타 : oldBlocked;
+  if (blockedMom && blockedInsta) return 'blocked';
+  const needMom   = !!(r.후기링크_맘카페 && (''+r.후기링크_맘카페).trim()) && !blockedMom;
+  const needInsta = !!(r.후기링크_인스타 && (''+r.후기링크_인스타).trim()) && !blockedInsta;
   const anyNeeded = needMom || needInsta;
   const momOk   = !needMom   || r.발송완료_맘카페;
   const instaOk = !needInsta || r.발송완료_인스타;
-  const sent = anyNeeded && momOk && instaOk;
-  if (sent) return 'sent';
+  if (anyNeeded && momOk && instaOk) return 'sent';
+  const sentCount = (needMom && r.발송완료_맘카페 ? 1 : 0) + (needInsta && r.발송완료_인스타 ? 1 : 0);
+  if (sentCount > 0) return 'partial';
   return 'unsent';
+}
+function getBlockedChannels(r){
+  const oldBlocked = !!r.발송불가;
+  return {
+    mom:   (r.발송불가_맘카페 !== undefined) ? !!r.발송불가_맘카페   : oldBlocked,
+    insta: (r.발송불가_인스타 !== undefined) ? !!r.발송불가_인스타 : oldBlocked,
+  };
 }
 
 function render(){
@@ -180,11 +202,12 @@ function render(){
 
   let kpiTotal = 0, kpiSoon = 0, kpiOverdue = 0, kpiDone = 0, kpiAmount = 0;
   const annotated = _DATA.map(r => {
-    const sendDate = computeSendDate(r.작성일);
+    const availableDate = computeAvailableDate(r.작성일);
+    const sendDate = computeShipDate(availableDate);
     const status = rowStatus(r);
     let dDay = null;
     if (sendDate) dDay = Math.round((new Date(sendDate).setHours(0,0,0,0) - todayMs)/86400000);
-    return { ...r, _sendDate: sendDate, _status: status, _dDay: dDay };
+    return { ...r, _availableDate: availableDate, _sendDate: sendDate, _status: status, _dDay: dDay };
   });
 
   for (const r of annotated){
@@ -236,7 +259,7 @@ function render(){
   let html = `<table><thead><tr>
     <th>작성일</th><th>고객명</th><th>전화번호</th>
     <th>맘카페 후기</th><th>인스타 후기</th>
-    <th>발송 예정일</th><th>발송 상태</th><th>메모</th>
+    <th>발송 가능일</th><th>발송 예정일</th><th>발송 상태</th><th>메모</th>
   </tr></thead><tbody>`;
 
   for (const r of rows){
@@ -258,24 +281,38 @@ function render(){
     let statusChip;
     if (blocked) statusChip = `<span class="chip chip-blocked" title="${esc(r.발송불가_사유||'')}">발송불가</span>`;
     else if (sent) statusChip = `<span class="chip chip-sent">발송</span>`;
+    else if (r._status === 'partial') statusChip = `<span class="chip chip-partial">부분 발송</span>`;
     else statusChip = `<span class="chip chip-unsent">미발송</span>`;
 
-    const momCell = r.후기링크_맘카페
-      ? `<a href="${esc(r.후기링크_맘카페)}" target="_blank">🔗 보기</a>${r.아이디_맘카페 ? `<div class="memo-sub">@${esc(r.아이디_맘카페)}</div>` : ''}`
-      : (r.아이디_맘카페 ? `<div class="memo-sub">@${esc(r.아이디_맘카페)}</div>` : '-');
-    const instaCell = r.후기링크_인스타
-      ? `<a href="${esc(r.후기링크_인스타)}" target="_blank">🔗 보기</a>${r.아이디_인스타 ? `<div class="memo-sub">@${esc(r.아이디_인스타)}</div>` : ''}`
-      : (r.아이디_인스타 ? `<div class="memo-sub">@${esc(r.아이디_인스타)}</div>` : '-');
+    const blk = getBlockedChannels(r);
+    const hasMom   = !!(r.후기링크_맘카페 && (''+r.후기링크_맘카페).trim());
+    const hasInsta = !!(r.후기링크_인스타 && (''+r.후기링크_인스타).trim());
+    const momDot = (hasMom && !blk.mom)
+      ? `<span class="dot-ok" title="발송 가능">●</span>`
+      : `<span class="dot-x" title="${!hasMom ? '후기 미작성' : '발송불가'}">✕</span>`;
+    const instaDot = (hasInsta && !blk.insta)
+      ? `<span class="dot-ok" title="발송 가능">●</span>`
+      : `<span class="dot-x" title="${!hasInsta ? '후기 미작성' : '발송불가'}">✕</span>`;
+    const momLink = r.후기링크_맘카페
+      ? `<a href="${esc(r.후기링크_맘카페)}" target="_blank">🔗 보기</a>`
+      : `<span style="color:#9ca3af">-</span>`;
+    const instaLink = r.후기링크_인스타
+      ? `<a href="${esc(r.후기링크_인스타)}" target="_blank">🔗 보기</a>`
+      : `<span style="color:#9ca3af">-</span>`;
+    const momCell = `<div class="ch-row">${momDot}${momLink}</div>${r.아이디_맘카페 ? `<div class="memo-sub" style="padding-left:18px">@${esc(r.아이디_맘카페)}</div>` : ''}`;
+    const instaCell = `<div class="ch-row">${instaDot}${instaLink}</div>${r.아이디_인스타 ? `<div class="memo-sub" style="padding-left:18px">@${esc(r.아이디_인스타)}</div>` : ''}`;
 
-    const memoCell = `${blocked && r.발송불가_사유 ? `<div class="reason">⚠️ ${esc(r.발송불가_사유)}</div>` : ''}${r.메모 ? `<div class="${blocked && r.발송불가_사유 ? 'memo-sub' : ''}">${esc(r.메모)}</div>` : ''}`;
+    const memoCell = `${r.발송불가_사유 ? `<div class="reason">⚠️ ${esc(r.발송불가_사유)}</div>` : ''}${r.메모 ? `<div class="${r.발송불가_사유 ? 'memo-sub' : ''}">${esc(r.메모)}</div>` : ''}`;
 
+    const availableStyle = blocked ? 'color:#92400e;text-decoration:line-through' : 'color:#6b7280';
     html += `<tr class="${blocked ? 'row-blocked' : ''}">
       <td>${esc(r.작성일)||'-'}</td>
       <td>${esc(r.고객명)||'-'}</td>
       <td>${esc(r.전화번호)||'-'}</td>
       <td>${momCell}</td>
       <td>${instaCell}</td>
-      <td><div style="${sendStyle}">${esc(r._sendDate)||'-'}</div>${sendSub}</td>
+      <td><div style="${availableStyle}">${esc(fmtDow(r._availableDate))}</div></td>
+      <td><div style="${sendStyle}">${esc(fmtDow(r._sendDate))}</div>${sendSub}</td>
       <td>${statusChip}</td>
       <td>${memoCell || '-'}</td>
     </tr>`;
