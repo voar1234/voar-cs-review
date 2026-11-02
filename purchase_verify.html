@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>🧾 베이비페어 구매인증 현황 (공유)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --red:#dc2626; --red-bg:#fee2e2; --red-text:#991b1b; --yel:#d97706; --yel-bg:#fef3c7; --yel-text:#92400e; --grn:#059669; --grn-bg:#d1fae5; --grn-text:#065f46; --blu:#2563eb; }
+  * { box-sizing:border-box; }
+  body { font-family:'Noto Sans KR','Malgun Gothic',sans-serif; background:#f3f4f6; margin:0; padding:16px; color:#111827; }
+  .container { max-width:1400px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .subtitle { color:#6b7280; font-size:13px; margin-bottom:16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .readonly-badge { background:#f3f4f6; color:#374151; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:600; border:1px solid #d1d5db; }
+  .panel { background:white; border-radius:8px; padding:16px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .kpi-row { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; }
+  .kpi-card { background:#f9fafb; padding:10px 12px; border-radius:6px; text-align:center; border:1px solid #f3f4f6; }
+  .kpi-label { font-size:11px; color:#6b7280; margin-bottom:4px; }
+  .kpi-value { font-size:20px; font-weight:700; color:#111827; line-height:1.2; }
+  .legend { display:flex; flex-wrap:wrap; gap:14px; font-size:12px; color:#6b7280; margin-top:10px; align-items:center; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; white-space:nowrap; }
+  .badge-ok { background:var(--grn-bg); color:var(--grn-text); }
+  .badge-pending { background:#e5e7eb; color:#374151; }
+  .badge-refund { background:var(--yel-bg); color:var(--yel-text); }
+  .badge-ng { background:var(--red-bg); color:var(--red-text); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { padding:8px 10px; border-bottom:1px solid #e5e7eb; text-align:left; }
+  th { background:#f9fafb; font-weight:600; color:#374151; font-size:12px; position:sticky; top:0; z-index:1; }
+  tr.row-unmatched { background:#fef2f2; }
+  tr.row-unmatched td:nth-child(3) { color:var(--red); font-weight:700; }
+  tr.row-refund { background:#fffbeb; }
+  tr.row-refund td:nth-child(8) { color:var(--yel); font-weight:700; }
+  .orderno { font-family:'Consolas',monospace; font-size:12px; }
+  .receipt-link { color:var(--blu); text-decoration:none; font-size:12px; }
+  .receipt-link:hover { text-decoration:underline; }
+  .filter-row { display:flex; gap:8px; margin-bottom:10px; font-size:12px; flex-wrap:wrap; align-items:center; }
+  .filter-chip { padding:4px 10px; border:1px solid #d1d5db; border-radius:16px; cursor:pointer; background:white; color:#6b7280; }
+  .filter-chip.active { background:#111827; color:white; border-color:#111827; }
+  .search-input { padding:5px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:12px; width:200px; margin-left:auto; }
+  .empty-state { text-align:center; color:#9ca3af; padding:40px; }
+  .sync-info { font-size:11px; color:#9ca3af; margin-left:auto; }
+  @media (max-width: 900px) {
+    .kpi-row { grid-template-columns:repeat(3,1fr); }
+    .search-input { margin-left:0; width:100%; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🧾 베이비페어 구매인증 현황</h1>
+  <div class="subtitle">
+    <span class="readonly-badge">👁 읽기 전용</span>
+    <span>60초마다 자동 새로고침 · 담당: 김민채</span>
+    <span class="sync-info" id="last-sync">로딩 중...</span>
+  </div>
+
+  <!-- KPI -->
+  <div class="panel">
+    <div class="kpi-row">
+      <div class="kpi-card"><div class="kpi-label">전체 접수</div><div class="kpi-value" id="kpi-total">-</div></div>
+      <div class="kpi-card"><div class="kpi-label">매칭 OK</div><div class="kpi-value" id="kpi-matched" style="color:var(--grn)">-</div></div>
+      <div class="kpi-card"><div class="kpi-label">매칭 실패 🔴</div><div class="kpi-value" id="kpi-unmatched" style="color:var(--red)">-</div></div>
+      <div class="kpi-card"><div class="kpi-label">구매확정</div><div class="kpi-value" id="kpi-confirmed">-</div></div>
+      <div class="kpi-card"><div class="kpi-label">반품/교환 🟡</div><div class="kpi-value" id="kpi-refund" style="color:var(--yel)">-</div></div>
+      <div class="kpi-card"><div class="kpi-label">누적 결제금액</div><div class="kpi-value" id="kpi-amount" style="color:#7c3aed">-</div></div>
+    </div>
+    <div class="legend">
+      <span>🔴 <span class="badge badge-ng">주문번호 불일치</span> 스마트스토어에 없는 주문번호 (고객 오기재 or 타 스토어 구매)</span>
+      <span>🟡 <span class="badge badge-refund">구매확정금액 상이</span> 반품/교환 발생</span>
+    </div>
+  </div>
+
+  <!-- 테이블 -->
+  <div class="panel">
+    <div class="filter-row">
+      <span class="filter-chip active" data-filter="all">전체</span>
+      <span class="filter-chip" data-filter="matched">매칭 OK</span>
+      <span class="filter-chip" data-filter="unmatched">🔴 매칭 실패</span>
+      <span class="filter-chip" data-filter="confirmed">구매확정</span>
+      <span class="filter-chip" data-filter="pending">미확정</span>
+      <span class="filter-chip" data-filter="refund">🟡 반품/교환</span>
+      <input type="text" class="search-input" id="search-input" placeholder="아이디/주문번호 검색">
+    </div>
+    <div style="overflow-x:auto;max-height:70vh">
+      <table id="result-table">
+        <thead>
+          <tr>
+            <th>접수일시</th>
+            <th>네이버 아이디</th>
+            <th>주문번호</th>
+            <th>영수증</th>
+            <th>결제금액</th>
+            <th>구매확정</th>
+            <th>구매확정금액</th>
+            <th>비고</th>
+          </tr>
+        </thead>
+        <tbody id="result-tbody">
+          <tr><td colspan="8" class="empty-state">데이터 로딩 중...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const SUPABASE_URL = 'https://vgzodlljefanuipohevy.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_Xj1aWpDLyfaAPxkn1q-ErA_94MEBT9V';
+const REFRESH_INTERVAL = 60000; // 60초
+
+const STATE = {
+  rows: [],
+  filter: 'all',
+  search: '',
+};
+
+const $ = (q) => document.querySelector(q);
+const $$ = (q) => [...document.querySelectorAll(q)];
+
+function escapeHtml(s) {
+  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtMoney(n) {
+  if (n === null || n === undefined || n === '') return '-';
+  const v = parseInt(String(n).replace(/[^0-9-]/g,'')) || 0;
+  return v.toLocaleString('ko-KR') + '원';
+}
+
+async function fetchData() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/purchase_verify?select=*&order=timestamp.desc`, {
+      headers: { apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` }
+    });
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    STATE.rows = await res.json();
+    $('#last-sync').textContent = `최종 동기화: ${new Date().toLocaleTimeString('ko-KR')}`;
+    render();
+  } catch (e) {
+    console.warn('fetch failed:', e);
+    $('#last-sync').textContent = '⚠ 동기화 실패: ' + e.message;
+    $('#last-sync').style.color = '#dc2626';
+  }
+}
+
+function render() {
+  const rs = STATE.rows;
+  const matched = rs.filter(r => r.status !== 'unmatched');
+  const confirmed = rs.filter(r => r.status === 'confirmed');
+  const unmatched = rs.filter(r => r.status === 'unmatched');
+  const refund = rs.filter(r => r.status === 'refund');
+  const totalAmount = matched.reduce((s,r) => s + (r.amount || 0), 0);
+
+  const set = (id,v) => { const el = $('#'+id); if (el) el.textContent = v; };
+  set('kpi-total', rs.length);
+  set('kpi-matched', matched.length);
+  set('kpi-unmatched', unmatched.length);
+  set('kpi-confirmed', confirmed.length);
+  set('kpi-refund', refund.length);
+  set('kpi-amount', totalAmount.toLocaleString('ko-KR')+'원');
+
+  let shown = rs;
+  if (STATE.filter === 'matched')    shown = matched;
+  if (STATE.filter === 'unmatched')  shown = unmatched;
+  if (STATE.filter === 'confirmed')  shown = confirmed;
+  if (STATE.filter === 'pending')    shown = rs.filter(r => r.status === 'pending');
+  if (STATE.filter === 'refund')     shown = refund;
+  if (STATE.search) {
+    const q = STATE.search.toLowerCase();
+    shown = shown.filter(r =>
+      String(r.naver_id).toLowerCase().includes(q) ||
+      String(r.order_no).toLowerCase().includes(q)
+    );
+  }
+
+  const tbody = $('#result-tbody');
+  if (!shown.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">' + (rs.length ? '필터 결과 없음' : '접수된 구매인증이 없습니다.') + '</td></tr>';
+    return;
+  }
+  tbody.innerHTML = shown.map(r => {
+    const rowClass = r.status === 'unmatched' ? 'row-unmatched' : r.status === 'refund' ? 'row-refund' : '';
+    const receiptCell = r.receipt
+      ? (String(r.receipt).match(/^https?:\/\//) ? `<a class="receipt-link" href="${escapeHtml(r.receipt)}" target="_blank">📷 보기</a>` : `<span style="color:#9ca3af;font-size:11px">${escapeHtml(String(r.receipt).slice(0,30))}</span>`)
+      : '<span style="color:#d1d5db;font-size:11px">(없음)</span>';
+    const confirmedBadge = r.confirmed === '구매확정' ? '<span class="badge badge-ok">구매확정</span>'
+                         : r.confirmed === '반품/교환' ? '<span class="badge badge-refund">반품/교환</span>'
+                         : r.confirmed === '미확정' ? '<span class="badge badge-pending">미확정</span>'
+                         : '<span style="color:#9ca3af">-</span>';
+    return `<tr class="${rowClass}">
+      <td style="font-size:12px;color:#6b7280;white-space:nowrap">${escapeHtml(r.timestamp)}</td>
+      <td style="font-weight:600">${escapeHtml(r.naver_id)}</td>
+      <td class="orderno">${escapeHtml(r.order_no)}</td>
+      <td>${receiptCell}</td>
+      <td style="text-align:right">${r.amount !== null ? fmtMoney(r.amount) : '<span style="color:#9ca3af">-</span>'}</td>
+      <td>${confirmedBadge}</td>
+      <td style="text-align:right">${r.confirmed_amount !== null ? fmtMoney(r.confirmed_amount) : '<span style="color:#9ca3af">-</span>'}</td>
+      <td style="font-size:11px;color:#6b7280">${escapeHtml(r.note)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// 이벤트
+window.addEventListener('DOMContentLoaded', () => {
+  $$('.filter-chip').forEach(c => c.addEventListener('click', () => {
+    $$('.filter-chip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    STATE.filter = c.dataset.filter;
+    render();
+  }));
+  $('#search-input').addEventListener('input', e => { STATE.search = e.target.value; render(); });
+
+  fetchData();
+  setInterval(fetchData, REFRESH_INTERVAL);
+});
+</script>
+</body>
+</html>
