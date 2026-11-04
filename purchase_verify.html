@@ -29,7 +29,26 @@
   tr.row-unmatched { background:#fef2f2; }
   tr.row-unmatched td:nth-child(3) { color:var(--red); font-weight:700; }
   tr.row-refund { background:#fffbeb; }
-  tr.row-refund td:nth-child(8) { color:var(--yel); font-weight:700; }
+  tr.row-refund td:nth-child(7) { color:var(--yel); font-weight:700; }
+  .campaign-info { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
+  .campaign-card { border-radius:8px; padding:12px 16px; display:flex; align-items:center; gap:14px; }
+  .campaign-card-deadline { background:#fffbeb; border:1.5px solid #fbbf24; border-left:5px solid #f59e0b; }
+  .campaign-card-giftcard { background:#eff6ff; border:1.5px solid #60a5fa; border-left:5px solid #2563eb; }
+  .campaign-icon { font-size:28px; }
+  .campaign-body { flex:1; }
+  .campaign-label { font-size:11px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; }
+  .campaign-card-deadline .campaign-label { color:#92400e; }
+  .campaign-card-giftcard .campaign-label { color:#1e40af; }
+  .campaign-value { font-size:20px; font-weight:800; margin-top:3px; letter-spacing:-0.3px; }
+  .campaign-card-deadline .campaign-value { color:#7c2d12; }
+  .campaign-card-giftcard .campaign-value { color:#1e3a8a; }
+  .campaign-sub { font-size:14px; font-weight:600; }
+  .campaign-note { font-size:10px; color:#475569; margin-top:3px; }
+  @media (max-width: 700px) { .campaign-info { grid-template-columns:1fr; } }
+  .user-note { cursor:default; margin-top:3px; padding:2px 5px; background:#fef9c3; border-left:3px solid #eab308; font-size:11px; color:#713f12; line-height:1.4; white-space:pre-wrap; word-break:break-word; }
+  .order-link { cursor:pointer; color:#2563eb; text-decoration:underline; text-underline-offset:2px; }
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:10000; padding:20px; }
+  .modal-box { background:white; border-radius:8px; padding:20px 24px; min-width:320px; max-width:420px; box-shadow:0 10px 30px rgba(0,0,0,0.3); }
   .orderno { font-family:'Consolas',monospace; font-size:12px; }
   .receipt-link { color:var(--blu); text-decoration:none; font-size:12px; }
   .receipt-link:hover { text-decoration:underline; }
@@ -54,15 +73,32 @@
     <span class="sync-info" id="last-sync">로딩 중...</span>
   </div>
 
-  <!-- KPI -->
+  <!-- KPI (상단에 캠페인 일정 포함) -->
   <div class="panel">
+    <div class="campaign-info">
+      <div class="campaign-card campaign-card-deadline">
+        <div class="campaign-icon">📅</div>
+        <div class="campaign-body">
+          <div class="campaign-label">네이버 폼 접수 기한</div>
+          <div class="campaign-value">11월 15일 <span class="campaign-sub">(일) 까지</span></div>
+        </div>
+      </div>
+      <div class="campaign-card campaign-card-giftcard">
+        <div class="campaign-icon">🎁</div>
+        <div class="campaign-body">
+          <div class="campaign-label">신세계 상품권 발송일</div>
+          <div class="campaign-value">11월 23일 <span class="campaign-sub">(월) 일괄 발송</span></div>
+          <div class="campaign-note">💰 구매확정 1건당 <b>1만원</b></div>
+        </div>
+      </div>
+    </div>
     <div class="kpi-row">
       <div class="kpi-card"><div class="kpi-label">전체 접수</div><div class="kpi-value" id="kpi-total">-</div></div>
       <div class="kpi-card"><div class="kpi-label">매칭 OK</div><div class="kpi-value" id="kpi-matched" style="color:var(--grn)">-</div></div>
       <div class="kpi-card"><div class="kpi-label">매칭 실패 🔴</div><div class="kpi-value" id="kpi-unmatched" style="color:var(--red)">-</div></div>
       <div class="kpi-card"><div class="kpi-label">구매확정</div><div class="kpi-value" id="kpi-confirmed">-</div></div>
       <div class="kpi-card"><div class="kpi-label">반품/교환 🟡</div><div class="kpi-value" id="kpi-refund" style="color:var(--yel)">-</div></div>
-      <div class="kpi-card"><div class="kpi-label">누적 결제금액</div><div class="kpi-value" id="kpi-amount" style="color:#7c3aed">-</div></div>
+      <div class="kpi-card"><div class="kpi-label">누적 상품권 지급액<div style="font-size:9px;color:#9ca3af;font-weight:400;margin-top:2px">구매확정 ×1만원</div></div><div class="kpi-value" id="kpi-giftcard" style="color:#7c3aed">-</div></div>
     </div>
     <div class="legend">
       <span>🔴 <span class="badge badge-ng">주문번호 불일치</span> 스마트스토어에 없는 주문번호 (고객 오기재 or 타 스토어 구매)</span>
@@ -83,22 +119,32 @@
     </div>
     <div style="overflow-x:auto;max-height:70vh">
       <table id="result-table">
+        <colgroup>
+          <col style="width:130px">
+          <col style="width:75px">
+          <col style="width:115px">
+          <col style="width:155px">
+          <col style="width:240px">
+          <col style="width:90px">
+          <col style="width:100px">
+          <col style="width:100px">
+          <col>
+        </colgroup>
         <thead>
           <tr>
-            <th>접수일시</th>
-            <th>네이버 아이디</th>
+            <th>네이버폼 접수일시</th>
             <th>성함</th>
             <th>전화번호</th>
             <th>주문번호</th>
             <th>구매제품명</th>
-            <th>결제금액</th>
+            <th style="text-align:right">결제금액</th>
             <th>구매확정</th>
-            <th>구매확정금액</th>
+            <th style="text-align:right">구매확정금액</th>
             <th>비고</th>
           </tr>
         </thead>
         <tbody id="result-tbody">
-          <tr><td colspan="10" class="empty-state">데이터 로딩 중...</td></tr>
+          <tr><td colspan="9" class="empty-state">데이터 로딩 중...</td></tr>
         </tbody>
       </table>
       <div id="pv-lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;cursor:zoom-out;align-items:center;justify-content:center" onclick="this.style.display='none'">
@@ -155,7 +201,7 @@ function render() {
   const confirmed = rs.filter(r => r.status === 'confirmed');
   const unmatched = rs.filter(r => r.status === 'unmatched');
   const refund = rs.filter(r => r.status === 'refund');
-  const totalAmount = matched.reduce((s,r) => s + (r.amount || 0), 0);
+  const giftcardTotal = confirmed.length * 10000;
 
   const set = (id,v) => { const el = $('#'+id); if (el) el.textContent = v; };
   set('kpi-total', rs.length);
@@ -163,7 +209,7 @@ function render() {
   set('kpi-unmatched', unmatched.length);
   set('kpi-confirmed', confirmed.length);
   set('kpi-refund', refund.length);
-  set('kpi-amount', totalAmount.toLocaleString('ko-KR')+'원');
+  set('kpi-giftcard', giftcardTotal.toLocaleString('ko-KR')+'원');
 
   let shown = rs;
   if (STATE.filter === 'matched')    shown = matched;
@@ -175,20 +221,22 @@ function render() {
     const q = STATE.search.toLowerCase();
     shown = shown.filter(r =>
       String(r.naver_id).toLowerCase().includes(q) ||
-      String(r.order_no).toLowerCase().includes(q)
+      String(r.order_no).toLowerCase().includes(q) ||
+      String(r.customer_name||'').toLowerCase().includes(q) ||
+      String(r.customer_phone||'').toLowerCase().includes(q)
     );
   }
 
   const tbody = $('#result-tbody');
   if (!shown.length) {
-    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">' + (rs.length ? '필터 결과 없음' : '접수된 구매확정 현황이 없습니다.') + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">' + (rs.length ? '필터 결과 없음' : '접수된 구매확정 현황이 없습니다.') + '</td></tr>';
     return;
   }
-  tbody.innerHTML = shown.map(r => {
+  tbody.innerHTML = shown.map((r, idx) => {
     const rowClass = r.status === 'unmatched' ? 'row-unmatched' : r.status === 'refund' ? 'row-refund' : '';
     const hasReceipt = r.receipt && String(r.receipt).match(/^https?:\/\//);
     const receiptIcon = hasReceipt
-      ? ` <span class="pv-receipt-icon" data-url="${escapeHtml(r.receipt)}" style="cursor:pointer;margin-left:6px;font-size:14px" title="영수증 보기 (클릭)">📷</span>`
+      ? ` <span class="pv-receipt-icon" data-idx="${idx}" style="cursor:pointer;margin-left:6px;font-size:14px" title="영수증 보기 (클릭)">📷</span>`
       : '';
     const confirmedBadge = r.confirmed === '구매확정' ? '<span class="badge badge-ok">구매확정</span>'
                          : r.confirmed === '미확정' ? '<span class="badge badge-pending">미확정</span>'
@@ -197,22 +245,26 @@ function render() {
     const prodName  = r.product_name ? escapeHtml(r.product_name) : '<span style="color:#d1d5db;font-size:11px">-</span>';
     const nameCell  = r.customer_name ? escapeHtml(r.customer_name) : '<span style="color:#d1d5db;font-size:11px">-</span>';
     const phoneCell = r.customer_phone ? escapeHtml(r.customer_phone) : '<span style="color:#d1d5db;font-size:11px">-</span>';
+    const autoNoteHtml = r.note ? `<div style="font-size:11px;color:#6b7280;line-height:1.4">${escapeHtml(r.note)}</div>` : '';
+    const userNoteHtml = r.user_note ? `<div class="user-note">📝 ${escapeHtml(r.user_note)}</div>` : '';
     return `<tr class="${rowClass}">
       <td style="font-size:12px;color:#6b7280;white-space:nowrap">${escapeHtml(r.timestamp)}</td>
-      <td style="font-weight:600">${escapeHtml(r.naver_id)}</td>
       <td style="font-size:12px">${nameCell}</td>
       <td style="font-size:12px;white-space:nowrap">${phoneCell}</td>
-      <td class="orderno" style="white-space:nowrap">${escapeHtml(r.order_no)}${receiptIcon}</td>
-      <td style="font-size:12px">${prodName}</td>
-      <td style="text-align:right">${r.amount !== null ? fmtMoney(r.amount) : '<span style="color:#9ca3af">-</span>'}</td>
+      <td class="orderno" style="white-space:nowrap"><span class="order-link" data-idx="${idx}" title="고객 정보 보기">${escapeHtml(r.order_no)}</span>${receiptIcon}</td>
+      <td style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${r.product_name ? escapeHtml(r.product_name) : ''}">${prodName}</td>
+      <td style="text-align:right;white-space:nowrap">${r.amount !== null ? fmtMoney(r.amount) : '<span style="color:#9ca3af">-</span>'}</td>
       <td>${confirmedBadge}</td>
-      <td style="text-align:right">${r.confirmed_amount !== null ? fmtMoney(r.confirmed_amount) : '<span style="color:#9ca3af">-</span>'}</td>
-      <td style="font-size:11px;color:#6b7280">${escapeHtml(r.note)}</td>
+      <td style="text-align:right;white-space:nowrap">${r.confirmed_amount !== null ? fmtMoney(r.confirmed_amount) : '<span style="color:#9ca3af">-</span>'}</td>
+      <td>${autoNoteHtml}${userNoteHtml}</td>
     </tr>`;
   }).join('');
+  STATE.shown = shown;
   tbody.querySelectorAll('.pv-receipt-icon').forEach(el => {
     el.addEventListener('click', () => {
-      const url = el.dataset.url;
+      const idx = parseInt(el.dataset.idx, 10);
+      const r = STATE.shown[idx]; if (!r) return;
+      const url = r.receipt;
       const box = $('#pv-lightbox');
       const img = $('#pv-lightbox-img');
       if (!box || !img) { window.open(url, '_blank'); return; }
@@ -221,6 +273,41 @@ function render() {
       box.style.display = 'flex';
     });
   });
+  tbody.querySelectorAll('.order-link').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.idx, 10);
+      const r = STATE.shown[idx]; if (!r) return;
+      showCustomerInfo(r);
+    });
+  });
+}
+
+function showCustomerInfo(r) {
+  const dash = '<span style="color:#9ca3af">-</span>';
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #e5e7eb">
+        <div style="font-weight:700;font-size:15px;color:#111827">👤 고객 정보</div>
+        <button class="close-btn" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;padding:0;line-height:1">×</button>
+      </div>
+      <div style="display:grid;grid-template-columns:90px 1fr;gap:10px 14px;font-size:13px;line-height:1.5">
+        <div style="color:#6b7280">주문일시</div><div style="font-weight:500">${r.order_date ? escapeHtml(r.order_date) : dash}</div>
+        <div style="color:#6b7280">네이버 아이디</div><div style="font-weight:600">${r.naver_id ? escapeHtml(r.naver_id) : dash}</div>
+        <div style="color:#6b7280">성함</div><div style="font-weight:500">${r.customer_name ? escapeHtml(r.customer_name) : dash}</div>
+        <div style="color:#6b7280">전화번호</div><div style="font-weight:500;font-family:Consolas,monospace">${r.customer_phone ? escapeHtml(r.customer_phone) : dash}</div>
+      </div>
+      <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;text-align:center">
+        주문번호: ${escapeHtml(r.order_no)}
+      </div>
+    </div>`;
+  overlay.addEventListener('click', () => overlay.remove());
+  overlay.querySelector('.close-btn').addEventListener('click', () => overlay.remove());
+  document.addEventListener('keydown', function esc(e){
+    if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', esc); }
+  });
+  document.body.appendChild(overlay);
 }
 
 // 이벤트
