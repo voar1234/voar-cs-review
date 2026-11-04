@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>🧾 베이비페어 구매인증 현황 (공유)</title>
+<title>🧾 베이비페어 구매확정 현황 (공유)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root { --red:#dc2626; --red-bg:#fee2e2; --red-text:#991b1b; --yel:#d97706; --yel-bg:#fef3c7; --yel-text:#92400e; --grn:#059669; --grn-bg:#d1fae5; --grn-text:#065f46; --blu:#2563eb; }
@@ -47,7 +47,7 @@
 </head>
 <body>
 <div class="container">
-  <h1>🧾 베이비페어 구매인증 현황</h1>
+  <h1>🧾 베이비페어 구매확정 현황</h1>
   <div class="subtitle">
     <span class="readonly-badge">👁 읽기 전용</span>
     <span>60초마다 자동 새로고침 · 담당: 김민채</span>
@@ -87,8 +87,10 @@
           <tr>
             <th>접수일시</th>
             <th>네이버 아이디</th>
+            <th>성함</th>
+            <th>전화번호</th>
             <th>주문번호</th>
-            <th>영수증</th>
+            <th>구매제품명</th>
             <th>결제금액</th>
             <th>구매확정</th>
             <th>구매확정금액</th>
@@ -96,9 +98,12 @@
           </tr>
         </thead>
         <tbody id="result-tbody">
-          <tr><td colspan="8" class="empty-state">데이터 로딩 중...</td></tr>
+          <tr><td colspan="10" class="empty-state">데이터 로딩 중...</td></tr>
         </tbody>
       </table>
+      <div id="pv-lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;cursor:zoom-out;align-items:center;justify-content:center" onclick="this.style.display='none'">
+        <img id="pv-lightbox-img" style="max-width:92vw;max-height:92vh;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.5)">
+      </div>
     </div>
   </div>
 </div>
@@ -176,29 +181,46 @@ function render() {
 
   const tbody = $('#result-tbody');
   if (!shown.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">' + (rs.length ? '필터 결과 없음' : '접수된 구매인증이 없습니다.') + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">' + (rs.length ? '필터 결과 없음' : '접수된 구매확정 현황이 없습니다.') + '</td></tr>';
     return;
   }
   tbody.innerHTML = shown.map(r => {
     const rowClass = r.status === 'unmatched' ? 'row-unmatched' : r.status === 'refund' ? 'row-refund' : '';
-    const receiptCell = r.receipt
-      ? (String(r.receipt).match(/^https?:\/\//) ? `<a class="receipt-link" href="${escapeHtml(r.receipt)}" target="_blank">📷 보기</a>` : `<span style="color:#9ca3af;font-size:11px">${escapeHtml(String(r.receipt).slice(0,30))}</span>`)
-      : '<span style="color:#d1d5db;font-size:11px">(없음)</span>';
+    const hasReceipt = r.receipt && String(r.receipt).match(/^https?:\/\//);
+    const receiptIcon = hasReceipt
+      ? ` <span class="pv-receipt-icon" data-url="${escapeHtml(r.receipt)}" style="cursor:pointer;margin-left:6px;font-size:14px" title="영수증 보기 (클릭)">📷</span>`
+      : '';
     const confirmedBadge = r.confirmed === '구매확정' ? '<span class="badge badge-ok">구매확정</span>'
-                         : r.confirmed === '반품/교환' ? '<span class="badge badge-refund">반품/교환</span>'
                          : r.confirmed === '미확정' ? '<span class="badge badge-pending">미확정</span>'
+                         : r.status === 'refund' ? `<span class="badge badge-refund">${escapeHtml(r.confirmed)}</span>`
                          : '<span style="color:#9ca3af">-</span>';
+    const prodName  = r.product_name ? escapeHtml(r.product_name) : '<span style="color:#d1d5db;font-size:11px">-</span>';
+    const nameCell  = r.customer_name ? escapeHtml(r.customer_name) : '<span style="color:#d1d5db;font-size:11px">-</span>';
+    const phoneCell = r.customer_phone ? escapeHtml(r.customer_phone) : '<span style="color:#d1d5db;font-size:11px">-</span>';
     return `<tr class="${rowClass}">
       <td style="font-size:12px;color:#6b7280;white-space:nowrap">${escapeHtml(r.timestamp)}</td>
       <td style="font-weight:600">${escapeHtml(r.naver_id)}</td>
-      <td class="orderno">${escapeHtml(r.order_no)}</td>
-      <td>${receiptCell}</td>
+      <td style="font-size:12px">${nameCell}</td>
+      <td style="font-size:12px;white-space:nowrap">${phoneCell}</td>
+      <td class="orderno" style="white-space:nowrap">${escapeHtml(r.order_no)}${receiptIcon}</td>
+      <td style="font-size:12px">${prodName}</td>
       <td style="text-align:right">${r.amount !== null ? fmtMoney(r.amount) : '<span style="color:#9ca3af">-</span>'}</td>
       <td>${confirmedBadge}</td>
       <td style="text-align:right">${r.confirmed_amount !== null ? fmtMoney(r.confirmed_amount) : '<span style="color:#9ca3af">-</span>'}</td>
       <td style="font-size:11px;color:#6b7280">${escapeHtml(r.note)}</td>
     </tr>`;
   }).join('');
+  tbody.querySelectorAll('.pv-receipt-icon').forEach(el => {
+    el.addEventListener('click', () => {
+      const url = el.dataset.url;
+      const box = $('#pv-lightbox');
+      const img = $('#pv-lightbox-img');
+      if (!box || !img) { window.open(url, '_blank'); return; }
+      img.src = url;
+      img.onerror = () => { box.style.display='none'; window.open(url, '_blank'); };
+      box.style.display = 'flex';
+    });
+  });
 }
 
 // 이벤트
