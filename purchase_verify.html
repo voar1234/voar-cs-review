@@ -16,7 +16,9 @@
   .subtitle { color:#6b7280; font-size:13px; margin-bottom:16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .readonly-badge { background:#f3f4f6; color:#374151; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:600; border:1px solid #d1d5db; }
   .panel { background:white; border-radius:8px; padding:16px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
-  .kpi-row { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; }
+  .kpi-row { display:grid; grid-template-columns:repeat(7,1fr); gap:10px; }
+  .badge-gift { background:var(--grn-bg); color:var(--grn-text); }
+  .badge-gift-no { background:#fff7ed; color:#9a3412; border:1px dashed #fdba74; }
   .kpi-card { background:#f9fafb; padding:10px 12px; border-radius:6px; text-align:center; border:1px solid #f3f4f6; }
   .kpi-label { font-size:11px; color:#6b7280; margin-bottom:4px; }
   .kpi-value { font-size:20px; font-weight:700; color:#111827; line-height:1.2; }
@@ -102,10 +104,12 @@
       <div class="kpi-card"><div class="kpi-label">구매확정</div><div class="kpi-value" id="kpi-confirmed">-</div></div>
       <div class="kpi-card"><div class="kpi-label">반품/교환 🟡</div><div class="kpi-value" id="kpi-refund" style="color:var(--yel)">-</div></div>
       <div class="kpi-card"><div class="kpi-label">누적 상품권 지급액<div style="font-size:9px;color:#9ca3af;font-weight:400;margin-top:2px">구매확정 ×1만원</div></div><div class="kpi-value" id="kpi-giftcard" style="color:#7c3aed">-</div></div>
+      <div class="kpi-card" style="border-color:#a7f3d0"><div class="kpi-label">🎁 상품권 발송완료<div style="font-size:9px;color:#9ca3af;font-weight:400;margin-top:2px">발송 / 구매확정</div></div><div class="kpi-value" id="kpi-giftsent" style="color:var(--grn)">-</div></div>
     </div>
     <div class="legend">
       <span>🔴 <span class="badge badge-ng">주문번호 불일치</span> 스마트스토어에 없는 주문번호 (고객 오기재 or 타 스토어 구매)</span>
       <span>🟡 <span class="badge badge-refund">구매확정금액 상이</span> 반품/교환 발생</span>
+      <span>🎁 <span class="badge badge-gift">✅ 발송완료</span> 상품권 보냄 · <span class="badge badge-gift-no">미발송</span> 아직 안 보냄</span>
     </div>
   </div>
 
@@ -118,6 +122,8 @@
       <span class="filter-chip" data-filter="confirmed">구매확정</span>
       <span class="filter-chip" data-filter="pending">미확정</span>
       <span class="filter-chip" data-filter="refund">🟡 반품/교환</span>
+      <span class="filter-chip" data-filter="gift-sent">🎁 상품권 발송완료</span>
+      <span class="filter-chip" data-filter="gift-pending">⏳ 상품권 미발송</span>
       <input type="text" class="search-input" id="search-input" placeholder="아이디/주문번호 검색">
     </div>
     <div style="overflow-x:auto;max-height:70vh">
@@ -131,6 +137,7 @@
           <col style="width:90px">
           <col style="width:100px">
           <col style="width:100px">
+          <col style="width:120px">
           <col>
         </colgroup>
         <thead>
@@ -143,11 +150,12 @@
             <th style="text-align:right">결제금액</th>
             <th>구매확정</th>
             <th style="text-align:right">구매확정금액</th>
+            <th>상품권 발송</th>
             <th>비고</th>
           </tr>
         </thead>
         <tbody id="result-tbody">
-          <tr><td colspan="9" class="empty-state">데이터 로딩 중...</td></tr>
+          <tr><td colspan="10" class="empty-state">데이터 로딩 중...</td></tr>
         </tbody>
       </table>
       <div id="pv-lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;cursor:zoom-out;align-items:center;justify-content:center" onclick="this.style.display='none'">
@@ -163,9 +171,13 @@
 const SUPABASE_URL = 'https://vgzodlljefanuipohevy.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Xj1aWpDLyfaAPxkn1q-ErA_94MEBT9V';
 const REFRESH_INTERVAL = 60000; // 60초
+// 상품권 발송 여부 = 업무 대시보드 서버(읽기 전용 공개) — 담당자가 대시보드에서 체크하면 여기 반영
+const GIFT_URL = 'https://voar-work-dash-cloud.onrender.com/public/pv_gift_sent';
 
 const STATE = {
   rows: [],
+  gift: {},
+  giftOk: false,
   filter: 'all',
   search: '',
 };
@@ -182,7 +194,30 @@ function fmtMoney(n) {
   return v.toLocaleString('ko-KR') + '원';
 }
 
+async function fetchGift() {
+  try {
+    const res = await fetch(GIFT_URL + '?ts=' + Date.now(), { cache:'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    STATE.gift = (await res.json()) || {};
+    STATE.giftOk = true;
+  } catch (e) {
+    console.warn('gift fetch failed:', e);   // 서버 깨어나는 중(최대 1분)일 수 있음 → 다음 폴링에 재시도
+  }
+}
+function giftCell(r) {
+  const g = STATE.gift[r.id];
+  if (g) {
+    const d = new Date(g.sent_at);
+    const ds = isNaN(d) ? '' : `${d.getMonth()+1}/${d.getDate()}`;
+    return `<span class="badge badge-gift">✅ 발송완료 ${ds}</span>`;
+  }
+  if (r.status !== 'confirmed') return '<span style="color:#d1d5db;font-size:11px">대상 아님</span>';
+  if (!STATE.giftOk) return '<span style="color:#9ca3af;font-size:11px">확인 중…</span>';
+  return '<span class="badge badge-gift-no">미발송</span>';
+}
+
 async function fetchData() {
+  fetchGift().then(() => { if (STATE.rows.length) render(); });
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/purchase_verify?select=*&order=timestamp.desc`, {
       headers: { apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` }
@@ -213,6 +248,7 @@ function render() {
   set('kpi-confirmed', confirmed.length);
   set('kpi-refund', refund.length);
   set('kpi-giftcard', giftcardTotal.toLocaleString('ko-KR')+'원');
+  set('kpi-giftsent', STATE.giftOk ? `${confirmed.filter(r => STATE.gift[r.id]).length} / ${confirmed.length}` : '확인 중');
 
   let shown = rs;
   if (STATE.filter === 'matched')    shown = matched;
@@ -220,6 +256,8 @@ function render() {
   if (STATE.filter === 'confirmed')  shown = confirmed;
   if (STATE.filter === 'pending')    shown = rs.filter(r => r.status === 'pending');
   if (STATE.filter === 'refund')     shown = refund;
+  if (STATE.filter === 'gift-sent')    shown = rs.filter(r => STATE.gift[r.id]);
+  if (STATE.filter === 'gift-pending') shown = confirmed.filter(r => !STATE.gift[r.id]);
   if (STATE.search) {
     const q = STATE.search.toLowerCase();
     shown = shown.filter(r =>
@@ -232,7 +270,7 @@ function render() {
 
   const tbody = $('#result-tbody');
   if (!shown.length) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">' + (rs.length ? '필터 결과 없음' : '접수된 구매확정 현황이 없습니다.') + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">' + (rs.length ? '필터 결과 없음' : '접수된 구매확정 현황이 없습니다.') + '</td></tr>';
     return;
   }
   tbody.innerHTML = shown.map((r, idx) => {
@@ -259,6 +297,7 @@ function render() {
       <td style="text-align:right;white-space:nowrap">${r.amount !== null ? fmtMoney(r.amount) : '<span style="color:#9ca3af">-</span>'}</td>
       <td>${confirmedBadge}</td>
       <td style="text-align:right;white-space:nowrap">${r.confirmed_amount !== null ? fmtMoney(r.confirmed_amount) : '<span style="color:#9ca3af">-</span>'}</td>
+      <td>${giftCell(r)}</td>
       <td>${autoNoteHtml}${userNoteHtml}</td>
     </tr>`;
   }).join('');
